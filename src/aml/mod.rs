@@ -44,7 +44,7 @@ use bit_field::BitField;
 use core::{
     mem,
     slice,
-    str::FromStr,
+    str::{self, FromStr},
     sync::atomic::{AtomicU64, Ordering},
 };
 use log::{error, info, trace, warn};
@@ -235,13 +235,10 @@ where
         }
     }
 
-    pub fn install_region_handler<RH>(&self, space: RegionSpace, handler: RH)
-    where
-        RH: RegionHandler + 'static,
-    {
+    pub fn install_region_handler(&self, space: RegionSpace, handler: Box<dyn RegionHandler + 'static>) {
         let mut handlers = self.region_handlers.lock();
         assert!(handlers.get(&space).is_none(), "Tried to install handler for same space twice!");
-        handlers.insert(space, Box::new(handler));
+        handlers.insert(space, handler);
     }
 
     /// Initialize the namespace - this should be called after all tables have been loaded and
@@ -2718,9 +2715,14 @@ where
             | RegionSpace::GenericSerialBus
             | RegionSpace::Pcc
             | RegionSpace::Oem(_) => {
-                if let Some(_handler) = self.region_handlers.lock().get(&region.space) {
-                    warn!("Custom region handlers aren't actually supported yet.");
-                    Err(AmlError::LibUnimplemented)
+                if let Some(handler) = self.region_handlers.lock().get(&region.space) {
+                    match length {
+                        1 => handler.read_u8(region, offset).map(Into::into),
+                        2 => handler.read_u16(region, offset).map(Into::into),
+                        4 => handler.read_u32(region, offset).map(Into::into),
+                        8 => handler.read_u64(region, offset),
+                        _ => panic!(),
+                    }
                 } else {
                     Err(AmlError::NoHandlerForRegionAccess(region.space))
                 }
@@ -2786,9 +2788,14 @@ where
             | RegionSpace::GenericSerialBus
             | RegionSpace::Pcc
             | RegionSpace::Oem(_) => {
-                if let Some(_handler) = self.region_handlers.lock().get(&region.space) {
-                    warn!("Custom region handlers aren't actually supported yet.");
-                    Err(AmlError::LibUnimplemented)
+                if let Some(handler) = self.region_handlers.lock().get(&region.space) {
+                    match length {
+                        1 => handler.write_u8(region, offset, value as u8),
+                        2 => handler.write_u16(region, offset, value as u16),
+                        4 => handler.write_u32(region, offset, value as u32),
+                        8 => handler.write_u64(region, offset, value),
+                        _ => panic!(),
+                    }
                 } else {
                     Err(AmlError::NoHandlerForRegionAccess(region.space))
                 }

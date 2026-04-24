@@ -44,6 +44,8 @@
 
 #![no_std]
 #![feature(allocator_api)]
+#![feature(let_chains)]
+#![feature(vec_pop_if)]
 
 #[cfg_attr(test, macro_use)]
 #[cfg(test)]
